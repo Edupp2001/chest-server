@@ -24,7 +24,6 @@ public:
 	//take card from oppenent
 	//if 4 -> shest++
 };
-  
 
 map<string, Player> players;
 vector <Card> deck;
