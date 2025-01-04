@@ -2,6 +2,16 @@
 #include <iostream>
 #include <vector>
 using namespace std;
+void to_lower(char& s) {
+	if (s >= 'A' && s <= 'Z')
+		s += 'a' - 'A';
+}
+string to_lower(string S) {
+	for (int i = 0; i < S.size(); ++i) {
+		to_lower(S[i]);
+	}
+	return S;
+}
 string ITS(int a) {
 	string tmp, ans;
 	if (a < 0)

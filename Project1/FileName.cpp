@@ -14,7 +14,7 @@ using namespace std;
 
 class Player {
 public:
-	string name;
+	string name = "";
 	bool nothread = true;
 	sockaddr_in addr;
 	vector <Card> hand;//map?//should be private
@@ -41,30 +41,82 @@ void TalkToClient(string ip, SOCKET listener) {
 	int n = 1;
 	string data = "";
 	bool user = true;
+	
 	while (data != "quit" && user) {
+		//в случае потери соединения мы готовы ждать игрока 15 секунд, иначе он мудак
 		if (n == -1) {
 			auto now = chrono::system_clock::now();
 			time_t timeStart = chrono::system_clock::to_time_t(now);
 			time_t timeNow = timeStart;
-			const int deltatime = 10;
+			const int deltatime = 15;
 			while (timeStart + deltatime >= timeNow) {
 				timeNow = chrono::system_clock::to_time_t(chrono::system_clock::now());
 			}
 			user = false;
 		}
 		data = "";
+		//очищаем буфер
 		memset(buf, 0, 2000);
-		n = recv(curr_sock, buf, 2000, 0);
-		if (n) user = true;
+		//получаем сообщение
+		n = recv(curr_sock, buf, 2000, 0);//пустое сообщение возвращает код -1
+		//проверка что игрок здесь
+		if (n != -1)
+			user = true;
 		data = buf;
-		players[ip].name = data;
-		//cout << data << endl;
-		string hand = "your msg is: " + data;
-		cout << inet_ntoa(players[ip].addr.sin_addr) << endl;
-		send(curr_sock, hand.c_str(), hand.size(), 0);
+
+		string msg = "";
+		if (!gamestatus) {
+			if (players[ip].name == "") 
+				cout << data << " is here!" << endl;
+			else 
+				cout << players[ip].name << " changed his name to :" << data << endl;
+			players[ip].name = data;
+			msg = "the game is not started yet";
+		}
+		else {
+			//0 получить колоду
+			if (data == "0")
+				for (int i = 0; i < players[ip].hand.size(); ++i)
+					msg += ITS(players[ip].hand[i].id) + " ";//отправляем сообщение в виде id карт
+			
+		}
+		send(curr_sock, msg.c_str(), msg.size(), 0);
 	}
 	closesocket(listener);
 	closesocket(curr_sock);
+	cout << players[ip].name << " left us :C" << endl;
+}
+void start_game_chest(int size) {
+	const int cards_at_start = 4;
+	const int each_suit = 15;//2-A is 13; 0,1,2 are reserved
+	vector <Card> deck = create_deck(size);
+	for (auto it = players.begin(); it != players.end(); ++it) {
+		(*it).second.hand_counter.resize(each_suit);
+		for (int k = 0; k < each_suit; ++k) {
+			(*it).second.hand_counter[k] = 0;
+		}
+	}
+	//give 4 cards to players
+	for (int i = 0; i < cards_at_start; ++i) {
+		for (auto it = players.begin(); it != players.end(); ++it) {
+			(*it).second.hand.push_back(deck[size - 1]);
+			(*it).second.hand_counter[deck[size - 1].code]++;
+			size--;
+		}
+	}
+	gamestatus = true;
+	/*
+	//check for chests from start, restart if found
+	for (auto it = players.begin(); it != players.end(); ++it) {
+		for (int j = 0; j < 15; ++j) {
+			if ((*it).second.hand_counter[j] == 4) {
+				cout << "oops! chest from start, you are too lucky playerid:" << (*it).first << "!" << "I'm restarting the game!";//вероятно это лишнее, колода хорошо замешана
+				gamestatus = false;
+				start_game_chest(deck.size());//игроки глобальные, откажусь от этой идеи
+			}
+		}
+	}
+	*/
 }
 void ClientFirstConnects(int num_cards) {
 	WSADATA wsd;
@@ -99,43 +151,12 @@ void ClientFirstConnects(int num_cards) {
 			cout << it->second.name << " ";
 		}
 	}
+	cout << endl;
 	if (players.size() == 1)
 		cout << "look's like (s)he has no friends!" << endl;
-	//start_game_chest(players, num_cards);
+	start_game_chest(num_cards);
 }
-void start_game_chest(int size) {
-	const int cards_at_start = 4;
-	const int each_suit = 15;//2-A is 13; 0,1,2 are reserved
-	bool gamestatus = true;
-	vector <Card> deck = create_deck(size);
-	for (auto it = players.begin(); it != players.end(); ++it) {
-		(*it).second.hand_counter.resize(each_suit);
-		for (int k = 0; k < each_suit; ++k) {
-			(*it).second.hand_counter[k] = 0;
-		}
-	}
-	//give 4 cards to players
-	for (int i = 0; i < cards_at_start; ++i) {
-		for (auto it = players.begin(); it != players.end(); ++it) {
-			(*it).second.hand.push_back(deck[size - 1]);
-			(*it).second.hand_counter[deck[size - 1].code]++;
-			size--;
-		}
-	}
-	gamestatus = true;
-	/*
-	//check for chests from start, restart if found
-	for (auto it = players.begin(); it != players.end(); ++it) {
-		for (int j = 0; j < 15; ++j) {
-			if ((*it).second.hand_counter[j] == 4) {
-				cout << "oops! chest from start, you are too lucky playerid:" << (*it).first << "!" << "I'm restarting the game!";//вероятно это лишнее, колода хорошо замешана
-				gamestatus = false;
-				start_game_chest(deck.size());//игроки глобальные, откажусь от этой идеи
-			}
-		}
-	}
-	*/
-}
+
 
 int main() {
 	srand(time(NULL));
