@@ -42,11 +42,12 @@ void checkforchest(string ip, int code) {
 			if (players[ip].hand[i].code == code) {//находим подходящие по коду
 				swap(players[ip].hand[i], players[ip].hand[players[ip].hand.size() - 1]);//кидаем карту в конец
 				players[ip].hand.pop_back();//удаляем ее
+				--i;//потому что карта в конце тоже может подходить
 			}
 		}
 	}
 	if (handsize(ip) == 0) {
-		Card topdeck = deck[deck.size() - 1];//берем топдек
+		Card topdeck = Card(deck[deck.size() - 1].id);//берем топдек
 		int topdeckcode = topdeck.code;//берем код топдека
 		deck.pop_back();//удаяем карту с топдека
 		players[ip].hand.push_back(topdeck);//кладем в руку
@@ -54,7 +55,7 @@ void checkforchest(string ip, int code) {
 	}
 }
 void drawcard(string ip) {
-	Card topdeck = deck[deck.size() - 1];//берем топдек
+	Card topdeck = Card(deck[deck.size() - 1].id);//берем топдек
 	int topdeckcode = topdeck.code;//берем код топдека
 	deck.pop_back();//удаяем карту с топдека
 	players[ip].hand.push_back(topdeck);//кладем в руку
@@ -129,7 +130,8 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 				else
 					code = STI(data);
 				if (players[ip].myturn) {//если ход игрока
-					if (players[players[ip].nextip].hand_counter[n]) {//мы проверяем наличие карты у его оппонента 
+					
+					if (players[players[ip].nextip].hand_counter[code]) {//мы проверяем наличие карты у его оппонента 
 						players[ip].hand_counter[code] += players[players[ip].nextip].hand_counter[code];//добваляем в каунтер
 						players[players[ip].nextip].hand_counter[code] = 0;//обнуляем каунтер оппонента
 						for (int i = 0; i < players[players[ip].nextip].hand.size(); ++i) {//проходимся по картам оппонента
@@ -137,12 +139,15 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 								players[ip].hand.push_back(players[players[ip].nextip].hand[i]);//добавляем карту себе
 								swap(players[players[ip].nextip].hand[i], (players[players[ip].nextip].hand[players[players[ip].nextip].hand.size() - 1]));//закидываем "копию" карты в конец
 								players[players[ip].nextip].hand.pop_back();//чтобы удалить ее
+								--i;//потому что мы не проверили карту, что была в конце
 							}
 						}
+						
 						checkforchest(ip, code);//проверяем сундучок, в нем уже заложена проверка пустоты руки на вытягивание карты
 						if (handsize(players[ip].nextip) == 0) {//проверяем не забрали ли мы последнюю карту у соперника
 							drawcard(players[ip].nextip);//выдаем, если нужно
 						}
+						msg = "good choice, your turn again";
 					}
 					else {
 						drawcard(ip);//тянем карту в конце хода
@@ -190,7 +195,7 @@ bool choosenextplayer(bool pc = false) {
 void start_game_chest(int size) {
 	const int cards_at_start = 4;
 	const int each_suit = 15;//2-A is 13; 0,1,2 are reserved
-	vector <Card> deck = create_deck(size);
+	deck = create_deck(size);
 	for (auto it = players.begin(); it != players.end(); ++it) {
 		(*it).second.hand_counter.resize(each_suit);
 		for (int k = 0; k < each_suit; ++k) {
@@ -205,7 +210,7 @@ void start_game_chest(int size) {
 			size--;
 			deck.resize(size);
 		}
-	}	
+	}
 	gamestatus = choosenextplayer();
 	/*
 	//check for chests from start, restart if found
@@ -219,9 +224,9 @@ void start_game_chest(int size) {
 		}
 	}
 	*/
-	if (players["0.0.0.0"].name == "server") {
+	//if (players["0.0.0.0"].name == "server") {
 
-	}
+	//}
 	//server-player part
 
 
@@ -243,7 +248,7 @@ void ClientFirstConnects(int num_cards) {
 	auto now = chrono::system_clock::now();
 	time_t timeStart = chrono::system_clock::to_time_t(now);
 	time_t timeNow = timeStart;
-	int deltatime = 10;
+	int deltatime = 15;
 	int counter = 0;
 	SOCKET listener = socket(AF_INET, SOCK_STREAM, 0); //Создаем слушающий сокет
 	if (listener == INVALID_SOCKET)
