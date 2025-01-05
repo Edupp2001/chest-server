@@ -20,6 +20,8 @@ public:
 	vector <Card> hand;//map?//should be private
 	vector <string> chest;//
 	vector <int> hand_counter;//should be private
+	string nextip;
+	bool myturn = false;
 	//take card from deck
 	//take card from oppenent
 	//if 4 -> shest++
@@ -29,15 +31,10 @@ map<string, Player> players;
 vector <Card> deck;
 bool gamestatus = false;
 
-void TalkToClient(string ip, SOCKET listener) {
-	if (SOCKET_ERROR == ::bind(listener, (struct sockaddr*)&players[ip].addr, sizeof(players[ip].addr))) //Связываем сокет с адресом
-		cout << "Error with binding socket";
+void TalkToClient(string ip, SOCKET curr_sock) {
+	
 	char buf[2000];
-	listen(listener, 1);//очередь соединений 1
-	int len = sizeof(players[ip].addr);
-	SOCKET curr_sock;
-	if (FAILED(curr_sock = accept(listener, (struct sockaddr*)&players[ip].addr, &len)))
-		cout << "fail" << endl;
+	
 	int n = 1;
 	string data = "";
 	bool user = true;
@@ -68,21 +65,44 @@ void TalkToClient(string ip, SOCKET listener) {
 		if (!gamestatus) {
 			if (players[ip].name == "") 
 				cout << data << " is here!" << endl;
-			else 
-				cout << players[ip].name << " changed his name to :" << data << endl;
+			else if (data != "0")
+				cout << players[ip].name << " changed his name to: " << data << endl;
 			players[ip].name = data;
 			msg = "the game is not started yet";
 		}
 		else {
+			if (data == "what") {
+				for (auto it = players.begin(); it != players.end(); ++it) {
+					cout << (*it).first << endl;
+				}
+			}
 			//0 получить колоду
-			if (data == "0")
+			else if (data == "0")
+				for (int i = 3; i < players[ip].hand_counter.size(); ++i)
+					msg += ITS(players[ip].hand_counter[i]) + " ";//отправляем сообщение в виде id карт
+			else if (data == "1")
 				for (int i = 0; i < players[ip].hand.size(); ++i)
-					msg += ITS(players[ip].hand[i].id) + " ";//отправляем сообщение в виде id карт
-			
+					msg += ITS(players[ip].hand[i].id) + " ";
+			else if ((data >= "2" && data <= "9") || data == "10" || data == "j" || data == "q" || data == "k" || data == "a") {
+				msg = "cant play";
+				int num;
+				if (data == "j")
+					num = 9;
+				else if (data == "q")
+					num = 10;
+				else if (data == "k")
+					num = 11;
+				else if (data == "a")
+					num = 12;
+				else
+					num = STI(data);
+			}
+			else
+				msg = "unknown cmd";
 		}
 		send(curr_sock, msg.c_str(), msg.size(), 0);
 	}
-	closesocket(listener);
+	//closesocket(listener);
 	closesocket(curr_sock);
 	cout << players[ip].name << " left us :C" << endl;
 }
@@ -104,6 +124,16 @@ void start_game_chest(int size) {
 			size--;
 		}
 	}
+
+	auto prev = players.begin();
+	(*prev).second.myturn = true;
+	/*
+	auto now = players.begin()++;
+	for (;now != players.end(); ++now, ++prev) {
+		(*prev).second.nextip = (*now).first;
+	}
+	(*prev).second.nextip = (*players.begin()).first;
+	*/
 	gamestatus = true;
 	/*
 	//check for chests from start, restart if found
@@ -117,30 +147,42 @@ void start_game_chest(int size) {
 		}
 	}
 	*/
+	//server-player part
+
+
 }
 void ClientFirstConnects(int num_cards) {
 	WSADATA wsd;
 	WSAStartup(MAKEWORD(2, 2), &wsd);
-	//players["0.0.0.0"] = Player();
+	//players["0.0.0.0"].nothread = false;
 	auto now = chrono::system_clock::now();
 	time_t timeStart = chrono::system_clock::to_time_t(now);
 	time_t timeNow = timeStart;
 	int deltatime = 30;
+	SOCKET listener = socket(AF_INET, SOCK_STREAM, 0); //Создаем слушающий сокет
+	if (listener == INVALID_SOCKET)
+		cout << "Error with creating socket" << endl; //Ошибка создания сокета
+	fd_set list;
+	list.fd_array[50] = listener;
+	sockaddr_in addr; //Создаем и заполняем переменную для хранения адреса
+	addr.sin_family = AF_INET; //Семейство адресов, которые будет обрабатывать наш сервер, у нас это TCP/IP адреса
+	addr.sin_port = htons(3128); //Используем функцию htons для перевода номера порта в TCP/IP представление
+	addr.sin_addr.s_addr = htonl(INADDR_ANY); //INADDR_ANY означает, что сервер будет принимать запросы с любых IP
+	if (SOCKET_ERROR == ::bind(listener, (struct sockaddr*)&addr, sizeof(addr))) //Связываем сокет с адресом
+		cout << "Error with binding socket";
 	while (timeStart + deltatime > timeNow) {
-		SOCKET listener = socket(AF_INET, SOCK_STREAM, 0); //Создаем слушающий сокет
-		if (listener == INVALID_SOCKET)
-			cout << "Error with creating socket" << endl; //Ошибка создания сокета
-		fd_set list;
-		list.fd_array[50] = listener;
-		sockaddr_in addr; //Создаем и заполняем переменную для хранения адреса
-		addr.sin_family = AF_INET; //Семейство адресов, которые будет обрабатывать наш сервер, у нас это TCP/IP адреса
-		addr.sin_port = htons(3128); //Используем функцию htons для перевода номера порта в TCP/IP представление
-		addr.sin_addr.s_addr = htonl(INADDR_ANY); //INADDR_ANY означает, что сервер будет принимать запросы с любых IP
+		listen(listener, 1);//очередь соединений 1
+		int len = sizeof(addr);
+		SOCKET curr_sock;
+		if (FAILED(curr_sock = accept(listener, (struct sockaddr*)&addr, &len)))
+			cout << "fail" << endl;
 		string ip = inet_ntoa(addr.sin_addr);
+		cout << ip << endl;
+		system("pause");
 		if (players[ip].nothread) {
 			players[ip].addr = addr;
 			players[ip].nothread = false;
-			thread thr(TalkToClient, inet_ntoa(addr.sin_addr), listener);
+			thread thr(TalkToClient, inet_ntoa(addr.sin_addr), curr_sock);
 			thr.detach();
 		}
 		timeNow = chrono::system_clock::to_time_t(chrono::system_clock::now());
@@ -152,8 +194,13 @@ void ClientFirstConnects(int num_cards) {
 		}
 	}
 	cout << endl;
-	if (players.size() == 1)
+	if (players.size() == 1) {
 		cout << "look's like (s)he has no friends!" << endl;
+		players["0.0.0.0"].nothread = false;
+	}
+	
+		
+	
 	start_game_chest(num_cards);
 }
 
