@@ -1,14 +1,7 @@
 #pragma once
 #include <iostream>
 #include <vector>
-#include <time.h>
-#include <set>
-#include <map>
-#include <mutex>
-#include <chrono>
-#include <algorithm>
-#include <WinSock2.h>
-#include <thread>
+
 #pragma comment(lib, "ws2_32.lib")
 using namespace std;
 void to_lower(char& s) {
@@ -53,6 +46,8 @@ public:
 	int id;//id -> card
 	int code;//code -> [2, A]
 	pair <string, string> value;//card -> [2, A] + suit
+	Card() {}
+
 	Card(int n) {
 		this->id = n;
 		int num = n % 13 + 2;
