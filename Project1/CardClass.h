@@ -1,6 +1,15 @@
 #pragma once
 #include <iostream>
 #include <vector>
+#include <time.h>
+#include <set>
+#include <map>
+#include <mutex>
+#include <chrono>
+#include <algorithm>
+#include <WinSock2.h>
+#include <thread>
+#pragma comment(lib, "ws2_32.lib")
 using namespace std;
 void to_lower(char& s) {
 	if (s >= 'A' && s <= 'Z')

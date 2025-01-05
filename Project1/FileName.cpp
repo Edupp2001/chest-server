@@ -1,22 +1,13 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
-#include <iostream>
-#include <vector>
-#include <time.h>
-#include <set>
-#include <map>
-#include <chrono>
-#include <algorithm>
-#include <WinSock2.h>
-#include <thread>
-#pragma comment(lib, "ws2_32.lib")
+
 #include "CardClass.h"
+
 using namespace std;
 
 class Player {
 public:
 	string name = "";
 	bool nothread = true;
-	sockaddr_in addr;
 	vector <Card> hand;//map?//should be private
 	vector <string> chest;//
 	vector <int> hand_counter;//should be private
@@ -30,7 +21,7 @@ public:
 map<string, Player> players;
 vector <Card> deck;
 bool gamestatus = false;
-
+bool waitingforcon = false;
 void TalkToClient(string ip, SOCKET curr_sock) {
 	
 	char buf[2000];
@@ -65,9 +56,10 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 		if (!gamestatus) {
 			if (players[ip].name == "") 
 				cout << data << " is here!" << endl;
-			else if (data != "0")
+			else if (data != "0") {
 				cout << players[ip].name << " changed his name to: " << data << endl;
-			players[ip].name = data;
+				players[ip].name = data;
+			}
 			msg = "the game is not started yet";
 		}
 		else {
@@ -78,7 +70,7 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 			}
 			//0 получить колоду
 			else if (data == "0")
-				for (int i = 3; i < players[ip].hand_counter.size(); ++i)
+				for (int i = 2; i < players[ip].hand_counter.size(); ++i)
 					msg += ITS(players[ip].hand_counter[i]) + " ";//отправляем сообщение в виде id карт
 			else if (data == "1")
 				for (int i = 0; i < players[ip].hand.size(); ++i)
@@ -151,6 +143,17 @@ void start_game_chest(int size) {
 
 
 }
+void waitforcon(SOCKET listener, sockaddr_in addr, int len) {
+	SOCKET curr_sock = accept(listener, (struct sockaddr*)&addr, &len);
+	string ip = inet_ntoa(addr.sin_addr);
+	cout << ip << endl;
+	if (players[ip].nothread) {
+		players[ip].nothread = false;
+		thread thr(TalkToClient, inet_ntoa(addr.sin_addr), curr_sock);
+		thr.detach();
+	}
+	waitingforcon = false;
+}
 void ClientFirstConnects(int num_cards) {
 	WSADATA wsd;
 	WSAStartup(MAKEWORD(2, 2), &wsd);
@@ -159,6 +162,7 @@ void ClientFirstConnects(int num_cards) {
 	time_t timeStart = chrono::system_clock::to_time_t(now);
 	time_t timeNow = timeStart;
 	int deltatime = 30;
+	int counter = 0;
 	SOCKET listener = socket(AF_INET, SOCK_STREAM, 0); //Создаем слушающий сокет
 	if (listener == INVALID_SOCKET)
 		cout << "Error with creating socket" << endl; //Ошибка создания сокета
@@ -170,24 +174,19 @@ void ClientFirstConnects(int num_cards) {
 	addr.sin_addr.s_addr = htonl(INADDR_ANY); //INADDR_ANY означает, что сервер будет принимать запросы с любых IP
 	if (SOCKET_ERROR == ::bind(listener, (struct sockaddr*)&addr, sizeof(addr))) //Связываем сокет с адресом
 		cout << "Error with binding socket";
+	
+	listen(listener, 3);//очередь соединений 1
 	while (timeStart + deltatime > timeNow) {
-		listen(listener, 1);//очередь соединений 1
 		int len = sizeof(addr);
 		SOCKET curr_sock;
-		if (FAILED(curr_sock = accept(listener, (struct sockaddr*)&addr, &len)))
-			cout << "fail" << endl;
-		string ip = inet_ntoa(addr.sin_addr);
-		cout << ip << endl;
-		system("pause");
-		if (players[ip].nothread) {
-			players[ip].addr = addr;
-			players[ip].nothread = false;
-			thread thr(TalkToClient, inet_ntoa(addr.sin_addr), curr_sock);
-			thr.detach();
+		if (!waitingforcon) {
+			waitingforcon = true;
+			thread wfc(waitforcon, listener, addr, len);
+			wfc.detach();
 		}
 		timeNow = chrono::system_clock::to_time_t(chrono::system_clock::now());
 	}
-	if (players.size()) {
+	if (players.size() || 1) {
 		cout << "starting with " << players.size() << " players" << endl;
 		for (auto it = players.begin(); it != players.end(); ++it) {
 			cout << it->second.name << " ";
@@ -196,11 +195,8 @@ void ClientFirstConnects(int num_cards) {
 	cout << endl;
 	if (players.size() == 1) {
 		cout << "look's like (s)he has no friends!" << endl;
-		players["0.0.0.0"].nothread = false;
+		//players["0.0.0.0"].nothread = false;
 	}
-	
-		
-	
 	start_game_chest(num_cards);
 }
 
