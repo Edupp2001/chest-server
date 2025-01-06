@@ -54,13 +54,18 @@ void checkforchest(string ip, int code) {
 		players[ip].hand_counter[topdeckcode]++;//увеличиваем каунтер
 	}
 }
-void drawcard(string ip) {
-	Card topdeck = Card(deck[deck.size() - 1].id);//берем топдек
-	int topdeckcode = topdeck.code;//берем код топдека
-	deck.pop_back();//уда€ем карту с топдека
-	players[ip].hand.push_back(topdeck);//кладем в руку
-	players[ip].hand_counter[topdeckcode]++;//увеличиваем каунтер
-	checkforchest(ip, topdeckcode);//провер€ем сундучок
+int drawcard(string ip) {
+	if (deck.size() == 0)
+		return 0;
+	else {
+		Card topdeck = Card(deck[deck.size() - 1].id);//берем топдек
+		int topdeckcode = topdeck.code;//берем код топдека
+		deck.pop_back();//уда€ем карту с топдека
+		players[ip].hand.push_back(topdeck);//кладем в руку
+		players[ip].hand_counter[topdeckcode]++;//увеличиваем каунтер
+		checkforchest(ip, topdeckcode);//провер€ем сундучок
+		return deck.size() + 1;
+	}
 }
 void TalkToClient(string ip, SOCKET curr_sock) {
 	char buf[2000];
@@ -103,10 +108,11 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 			msg = "the game is not started yet";
 		}
 		else {
-			if (data == "what") {
-				for (auto it = players.begin(); it != players.end(); ++it) {
-					cout << (*it).first << endl;
-				}
+			if (players[ip].disconnectedguy != "") {
+				data = "quit";
+				msg = "game is finished";
+				send(curr_sock, msg.c_str(), msg.size(), 0);
+				msg = players[ip].disconnectedguy + " has diconnected game is over";
 			}
 			//0 получить колоду
 			//info players turn order, num of cards in hand, chests
@@ -117,7 +123,6 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 				for (int i = 0; i < players[ip].hand.size(); ++i)
 					msg += ITS(players[ip].hand[i].id) + " ";
 			else if ((data >= "2" && data <= "9") || data == "10" || data == "j" || data == "q" || data == "k" || data == "a") {
-				
 				int code;//код карты запроса
 				if (data == "j")
 					code = 11;
@@ -130,7 +135,7 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 				else
 					code = STI(data);
 				if (players[ip].myturn) {//если ход игрока
-					
+					players[players[ip].nextip].StolenCardsHistory.push_back(ITS(code));
 					if (players[players[ip].nextip].hand_counter[code]) {//мы провер€ем наличие карты у его оппонента 
 						players[ip].hand_counter[code] += players[players[ip].nextip].hand_counter[code];//добвал€ем в каунтер
 						players[players[ip].nextip].hand_counter[code] = 0;//обнул€ем каунтер оппонента
@@ -145,9 +150,11 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 						
 						checkforchest(ip, code);//провер€ем сундучок, в нем уже заложена проверка пустоты руки на выт€гивание карты
 						if (handsize(players[ip].nextip) == 0) {//провер€ем не забрали ли мы последнюю карту у соперника
-							drawcard(players[ip].nextip);//выдаем, если нужно
+							while (drawcard(players[ip].nextip) == 0)//выдаем, если нужно
+								players[ip].nextip = players[players[ip].nextip].nextip;//если колода пуста и у следующего игрока нет карт, игра дл€ него закончилась
 						}
 						msg = "good choice, your turn again";
+						
 					}
 					else {
 						drawcard(ip);//т€нем карту в конце хода
@@ -158,12 +165,48 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 				}
 				else
 					msg = "it is not your turn";
+				
 			}
 			else if (data == "info") {
-
+				msg = "";
+				for (auto it = players.begin(); it != players.end(); ++it) {
+					msg += (*it).second.name + ": " + ITS((*it).second.hand.size()) + " ";
+				}
+				msg += "\n";
+				for (int i = 0; i < players[ip].StolenCardsHistory.size(); ++i) {
+					msg += players[ip].StolenCardsHistory[i] + " ";
+				}
+				msg += "\n";
+				msg += "decksize: " + ITS(deck.size());
 			}
 			else
-				msg = "unknown cmd";
+				msg = ":" + data + ":" "is unknown cmd";
+		}
+		if (players[ip].nextip == ip) {
+			msg = "game is finished";
+			send(curr_sock, msg.c_str(), msg.size(), 0);
+			vector <string> winnerip;
+			int maxchest = 0;
+			for (auto it = players.begin(); it != players.end(); ++it) {
+				msg += (*it).second.name + " ";
+				if (maxchest < (*it).second.chest.size()) {
+					winnerip.clear();
+					maxchest = ((*it).second.chest.size());
+				}
+				else if (maxchest == ((*it).second.chest.size())) {
+					winnerip.push_back((*it).first);
+				}
+				for (int i = 0; i < (*it).second.chest.size(); ++i) {
+					msg += (*it).second.chest[i] + " ";
+				}
+			}
+			msg += "";
+			msg += "winner" + (winnerip.size() == 1) ? " is " : "s are ";
+			for (int i = 0; i < winnerip.size(); ++i) {
+				msg += players[winnerip[i]].name + " ";
+			}
+			msg += "with " + ITS(players[winnerip[0]].chest.size());
+			data = "quit";
 		}
 		send(curr_sock, msg.c_str(), msg.size(), 0);
 	}
