@@ -46,7 +46,7 @@ void checkforchest(string ip, int code) {
 			}
 		}
 	}
-	if (handsize(ip) == 0) {
+	if (handsize(ip) == 0 && deck.size()) {
 		Card topdeck = Card(deck[deck.size() - 1].id);//берем топдек
 		int topdeckcode = topdeck.code;//берем код топдека
 		deck.pop_back();//удаяем карту с топдека
@@ -73,6 +73,7 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 	string data = "";
 	bool user = true;
 	while (data != "quit" && user) {
+
 		//в случае потери соединения мы готовы ждать игрока 15 секунд, иначе он мудак
 		if (n == -1) {
 			auto now = chrono::system_clock::now();
@@ -124,18 +125,26 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 					msg += ITS(players[ip].hand[i].id) + " ";
 			else if ((data >= "2" && data <= "9") || data == "10" || data == "j" || data == "q" || data == "k" || data == "a") {
 				int code;//код карты запроса
-				if (data == "j")
+				if (data == "j") {
 					code = 11;
-				else if (data == "q")
+					data = "J";
+				}
+				else if (data == "q") {
 					code = 12;
-				else if (data == "k")
+					data = "Q";
+				}
+				else if (data == "k") {
 					code = 13;
-				else if (data == "a")
+					data = "K";
+				}
+				else if (data == "a") {
 					code = 14;
+					data = "A";
+				}
 				else
 					code = STI(data);
 				if (players[ip].myturn) {//если ход игрока
-					players[players[ip].nextip].StolenCardsHistory.push_back(ITS(code));
+					players[players[ip].nextip].StolenCardsHistory.push_back(data);
 					if (players[players[ip].nextip].hand_counter[code]) {//мы проверяем наличие карты у его оппонента 
 						players[ip].hand_counter[code] += players[players[ip].nextip].hand_counter[code];//добваляем в каунтер
 						players[players[ip].nextip].hand_counter[code] = 0;//обнуляем каунтер оппонента
@@ -150,17 +159,20 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 						
 						checkforchest(ip, code);//проверяем сундучок, в нем уже заложена проверка пустоты руки на вытягивание карты
 						if (handsize(players[ip].nextip) == 0) {//проверяем не забрали ли мы последнюю карту у соперника
-							while (drawcard(players[ip].nextip) == 0)//выдаем, если нужно
+							while (drawcard(players[ip].nextip) == 0 && players[ip].nextip != ip)//выдаем, если нужно
 								players[ip].nextip = players[players[ip].nextip].nextip;//если колода пуста и у следующего игрока нет карт, игра для него закончилась
 						}
 						msg = "good choice, your turn again";
 						
 					}
 					else {
-						drawcard(ip);//тянем карту в конце хода
+						msg = "no card";
+						if (drawcard(ip)) {//тянем карту в конце хода
+							Card topdeck = players[ip].hand[players[ip].hand.size() - 1];
+							msg += ", you draw " + topdeck.value.first + " of " + topdeck.value.second;
+						}
 						players[ip].myturn = false;//заканчиваем ход
 						players[players[ip].nextip].myturn = true;//передаем его следующему игроку
-						msg = "no card";
 					}
 				}
 				else
@@ -209,6 +221,13 @@ void TalkToClient(string ip, SOCKET curr_sock) {
 			data = "quit";
 		}
 		send(curr_sock, msg.c_str(), msg.size(), 0);
+		if (data != "quit") {
+			while (!players[ip].myturn) {
+				//:C
+			}
+			msg = "your turn!" + players[ip].StolenCardsHistory.size() ? " enemy asked for " + players[ip].StolenCardsHistory[players[ip].StolenCardsHistory.size() - 1] : "";
+			send(curr_sock, msg.c_str(), msg.size(), 0);
+		}
 	}
 	//closesocket(listener);
 	closesocket(curr_sock);
@@ -337,10 +356,10 @@ int main() {
 	string input = "";
 	while (input != "quit") {
 		cin >> input;
-		if (input == "start_chest36") {
+		if (input == "start_chest36" || input == "1") {
 			ClientFirstConnects(36);
 		}
-		else if (input == "start_chest52" || input == "1") {
+		else if (input == "start_chest52") {
 			ClientFirstConnects(52);
 		}
 		else {
